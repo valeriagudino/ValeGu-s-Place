@@ -1,0 +1,707 @@
+<!-- Motor GTD — prototipo navegable del shell + módulo GTD -->
+<title>Motor GTD</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  /* Layout: fixed top app-bar (module switcher) + scrollable content area, single column, card-based task rows */
+  :root{
+    --bg:#f4f3f0; --surface:#ffffff; --surface-2:#ebe9e4; --border:#dedad2;
+    --ink:#1c1b19; --ink-dim:#6b675f; --ink-faint:#9b968b;
+    --accent:#1f6f5c; --accent-ink:#ffffff; --accent-soft:#e3efe9;
+    --warn:#a35a1f; --warn-soft:#f3e6d6;
+    --danger:#a33b3b;
+    --font-display:'Sora',system-ui,sans-serif;
+    --font-body:'IBM Plex Sans',system-ui,sans-serif;
+    --font-mono:'IBM Plex Mono',ui-monospace,monospace;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#171917; --surface:#1f221f; --surface-2:#272a27; --border:#363a36;
+      --ink:#eceae5; --ink-dim:#a9a69e; --ink-faint:#77746c;
+      --accent:#4fb89a; --accent-ink:#0d1a16; --accent-soft:#1d3129;
+      --warn:#e0a25a; --warn-soft:#3a2d1a;
+      --danger:#e07b7b;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#171917; --surface:#1f221f; --surface-2:#272a27; --border:#363a36;
+    --ink:#eceae5; --ink-dim:#a9a69e; --ink-faint:#77746c;
+    --accent:#4fb89a; --accent-ink:#0d1a16; --accent-soft:#1d3129;
+    --warn:#e0a25a; --warn-soft:#3a2d1a;
+    --danger:#e07b7b;
+    color-scheme: dark;
+  }
+  *{box-sizing:border-box}
+  body{background:var(--bg);color:var(--ink);font-family:var(--font-body);margin:0;min-height:100%}
+  html,body{height:100%}
+  h1,h2,h3{font-family:var(--font-display);text-wrap:balance;margin:0}
+  button{font-family:inherit;cursor:pointer}
+  input,select,textarea{font-family:inherit}
+  .tabular{font-variant-numeric:tabular-nums}
+
+  #app{display:flex;flex-direction:column;height:100%}
+
+  /* App bar */
+  header.bar{
+    position:sticky;top:env(safe-area-inset-top,0px);z-index:5;
+    background:var(--surface);border-bottom:1px solid var(--border);
+    padding:14px 20px;display:flex;align-items:center;gap:18px;flex-wrap:wrap;
+  }
+  header.bar .brand{font-family:var(--font-display);font-weight:700;font-size:1.05rem;letter-spacing:.01em}
+  nav.modules{display:flex;gap:6px;flex-wrap:wrap}
+  nav.modules button{
+    border:1px solid transparent;background:transparent;color:var(--ink-dim);
+    padding:7px 12px;border-radius:8px;font-size:.88rem;font-weight:500;
+    display:flex;align-items:center;gap:6px;
+  }
+  nav.modules button.active{background:var(--accent-soft);color:var(--accent);font-weight:600}
+  nav.modules button:disabled{opacity:.45;cursor:default}
+  nav.modules button .soon{font-size:.68rem;font-family:var(--font-mono);color:var(--ink-faint)}
+
+  main{flex:1;overflow-y:auto;padding:24px 20px 60px;max-width:760px;width:100%;margin:0 auto}
+  .lead{color:var(--ink-dim);font-size:.94rem;margin:2px 0 22px;max-width:60ch}
+
+  /* Dashboard */
+  .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:26px}
+  .stat{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 16px}
+  .stat .n{font-family:var(--font-mono);font-size:1.6rem;font-weight:500;line-height:1}
+  .stat .l{font-size:.76rem;color:var(--ink-dim);margin-top:5px;text-transform:uppercase;letter-spacing:.04em}
+  .stat.warn .n{color:var(--warn)}
+
+  /* Inbox capture */
+  .capture{
+    background:var(--surface);border:1px solid var(--border);border-radius:12px;
+    padding:14px;display:flex;gap:8px;margin-bottom:26px;
+  }
+  .capture input{
+    flex:1;border:none;background:transparent;font-size:1rem;color:var(--ink);outline:none;min-width:0;
+  }
+  .capture input::placeholder{color:var(--ink-faint)}
+  .capture button{
+    background:var(--accent);color:var(--accent-ink);border:none;border-radius:8px;
+    padding:0 16px;font-weight:600;font-size:.88rem;flex-shrink:0;
+  }
+
+  /* Filter/segment row */
+  .segments{display:flex;gap:6px;margin-bottom:14px;overflow-x:auto;padding-bottom:2px}
+  .segments button{
+    background:var(--surface);border:1px solid var(--border);color:var(--ink-dim);
+    padding:6px 12px;border-radius:999px;font-size:.82rem;white-space:nowrap;flex-shrink:0;
+  }
+  .segments button.active{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+
+  section.tasks{display:flex;flex-direction:column;gap:8px}
+  .task{
+    background:var(--surface);border:1px solid var(--border);border-radius:10px;
+    padding:12px 14px;display:flex;flex-direction:column;gap:8px;
+  }
+  .task-top{display:flex;align-items:flex-start;gap:10px}
+  .task-top .title{flex:1;min-width:0;font-size:.96rem;font-weight:500;line-height:1.35}
+  .task-top .title.done{color:var(--ink-faint);text-decoration:line-through}
+  select.state{
+    border:1px solid var(--border);background:var(--surface-2);color:var(--ink);
+    border-radius:7px;padding:5px 8px;font-size:.78rem;font-weight:500;flex-shrink:0;
+  }
+  .task-meta{display:flex;flex-wrap:wrap;gap:6px;font-size:.74rem}
+  .chip{
+    background:var(--surface-2);color:var(--ink-dim);border-radius:6px;padding:3px 8px;
+    display:flex;align-items:center;gap:4px;
+  }
+  .chip.due{font-family:var(--font-mono)}
+  .chip.due.soon{background:var(--warn-soft);color:var(--warn)}
+  .task-edit{display:flex;flex-wrap:wrap;gap:6px;border-top:1px dashed var(--border);padding-top:8px;margin-top:2px}
+  .task-edit input,.task-edit select{
+    border:1px solid var(--border);background:var(--bg);color:var(--ink);
+    border-radius:6px;padding:5px 7px;font-size:.78rem;min-width:0;
+  }
+  .task-edit .g1{flex:1 1 120px}
+  .task-edit .g2{flex:1 1 100px}
+  .task-edit .g3{flex:0 0 130px}
+
+  .empty{color:var(--ink-faint);font-size:.88rem;padding:26px 4px;text-align:center}
+
+  .soon-panel{
+    background:var(--surface);border:1px dashed var(--border);border-radius:12px;
+    padding:34px 20px;text-align:center;color:var(--ink-dim);
+  }
+  .soon-panel h2{font-size:1.05rem;margin-bottom:6px;color:var(--ink)}
+
+  footer.note{
+    max-width:760px;margin:0 auto;padding:0 20px 30px;color:var(--ink-faint);font-size:.76rem;line-height:1.5;
+  }
+</style>
+
+<div id="app">
+  <header class="bar">
+    <div class="brand">Motor GTD</div>
+    <nav class="modules" id="moduleNav"></nav>
+  </header>
+  <main id="main"></main>
+  <footer class="note" id="footNote"></footer>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  // ---- conexión con la API (Apps Script Web App publicado desde el Sheet) ----
+  var API_KEY = 'motorGtdApiUrl';
+  function getApiUrl(){ try { return localStorage.getItem(API_KEY) || ''; } catch(e){ return ''; } }
+  function setApiUrl(v){ try { localStorage.setItem(API_KEY, v); } catch(e){} }
+
+  var today = new Date();
+
+  var state = {
+    activeModule: 'gtd',
+    gtdView: 'tareas',
+    segment: 'todas',
+    proyectoAbierto: null,
+    projects: [],
+    tasks: [],
+    categorias: [],
+    loading: false,
+    saving: false,
+    error: '',
+    apiUrl: getApiUrl()
+  };
+
+  var ESTADOS = ['Inbox','Próxima','Esperando','Hecho'];
+  var PRIORIDADES = ['', 'Baja','Media','Alta'];
+
+  // ---- llamadas a la API ----
+  function cargarDatos(){
+    if(!state.apiUrl){ render(); return; }
+    state.loading = true; state.error = ''; render();
+    fetch(state.apiUrl)
+      .then(function(r){ if(!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+      .then(function(data){
+        state.tasks = data.tareas || [];
+        state.projects = data.proyectos || [];
+        state.categorias = data.categorias || [];
+        state.loading = false;
+        render();
+      })
+      .catch(function(err){
+        state.loading = false;
+        state.error = 'No se pudo cargar: ' + err.message;
+        render();
+      });
+  }
+
+  function guardar(payload){
+    state.saving = true; render();
+    return fetch(state.apiUrl, { method:'POST', body: JSON.stringify(payload) })
+      .then(function(r){ return r.json(); })
+      .then(function(data){
+        state.saving = false;
+        if(data.ok === false){
+          state.error = 'No se pudo guardar: ' + data.error;
+        } else {
+          state.tasks = data.tareas || state.tasks;
+          state.projects = data.proyectos || state.projects;
+          state.error = '';
+        }
+        render();
+      })
+      .catch(function(err){
+        state.saving = false;
+        state.error = 'No se pudo guardar: ' + err.message;
+        render();
+      });
+  }
+
+  var moduleNav = document.getElementById('moduleNav');
+  var main = document.getElementById('main');
+  var footNote = document.getElementById('footNote');
+
+  var MODULES = [
+    {id:'gtd', label:'GTD', ready:true},
+    {id:'compras', label:'Compras', ready:false},
+    {id:'maquillaje', label:'Maquillaje', ready:false},
+    {id:'outfits', label:'Outfits', ready:false}
+  ];
+
+  function renderNav(){
+    moduleNav.innerHTML = '';
+    MODULES.forEach(function(m){
+      var b = document.createElement('button');
+      b.textContent = m.label;
+      if(!m.ready){
+        var s = document.createElement('span');
+        s.className = 'soon'; s.textContent = 'pronto';
+        b.appendChild(s);
+        b.disabled = true;
+      } else {
+        if(state.activeModule === m.id) b.className = 'active';
+        b.addEventListener('click', function(){ state.activeModule = m.id; render(); });
+      }
+      moduleNav.appendChild(b);
+    });
+  }
+
+  function daysUntil(iso){
+    if(!iso) return null;
+    var d = new Date(iso + 'T00:00:00');
+    return Math.round((d - new Date(today.toDateString())) / 86400000);
+  }
+
+  function porFechaAscendente(a, b){
+    // sin fecha va al final; entre dos con fecha, la más próxima primero
+    if(!a.fecha && !b.fecha) return 0;
+    if(!a.fecha) return 1;
+    if(!b.fecha) return -1;
+    return a.fecha < b.fecha ? -1 : a.fecha > b.fecha ? 1 : 0;
+  }
+
+  function fmtDate(iso){
+    if(!iso) return '';
+    var d = new Date(iso + 'T00:00:00');
+    return d.toLocaleDateString('es-CL', {day:'numeric', month:'short'});
+  }
+
+  function renderConfigPanel(){
+    var wrap = document.createElement('div');
+    var lead = document.createElement('p');
+    lead.className = 'lead';
+    lead.textContent = 'Para conectar con tus datos reales, pegá la URL de la Web App de Apps Script (la que termina en /exec).';
+    wrap.appendChild(lead);
+
+    var form = document.createElement('form');
+    form.className = 'capture';
+    var input = document.createElement('input');
+    input.type = 'url'; input.required = true; input.placeholder = 'https://script.google.com/macros/s/.../exec';
+    input.value = state.apiUrl;
+    var btn = document.createElement('button');
+    btn.type = 'submit'; btn.textContent = 'Conectar';
+    form.appendChild(input); form.appendChild(btn);
+    form.addEventListener('submit', function(e){
+      e.preventDefault();
+      var val = input.value.trim();
+      if(!val) return;
+      setApiUrl(val);
+      state.apiUrl = val;
+      cargarDatos();
+    });
+    wrap.appendChild(form);
+    return wrap;
+  }
+
+  function renderGTD(){
+    var wrap = document.createElement('div');
+
+    if(!state.apiUrl){
+      wrap.appendChild(renderConfigPanel());
+      main.innerHTML = '';
+      main.appendChild(wrap);
+      return;
+    }
+
+    if(state.error){
+      var errBox = document.createElement('p');
+      errBox.className = 'lead';
+      errBox.style.color = 'var(--danger)';
+      errBox.textContent = state.error + ' — ';
+      var cambiar = document.createElement('button');
+      cambiar.type = 'button';
+      cambiar.textContent = 'cambiar URL';
+      cambiar.style.cssText = 'background:none;border:none;color:var(--danger);text-decoration:underline;padding:0;font-size:inherit';
+      cambiar.addEventListener('click', function(){ state.apiUrl=''; setApiUrl(''); render(); });
+      errBox.appendChild(cambiar);
+      wrap.appendChild(errBox);
+    }
+
+    if(state.loading){
+      var loadingP = document.createElement('p');
+      loadingP.className = 'lead';
+      loadingP.textContent = 'Cargando datos del Sheet…';
+      wrap.appendChild(loadingP);
+      main.innerHTML = ''; main.appendChild(wrap);
+      return;
+    }
+
+    var lead = document.createElement('p');
+    lead.className = 'lead';
+    lead.textContent = (state.gtdView === 'tareas'
+      ? 'Capturá en el inbox, procesá y cambiá estados. Para sumar tareas a un proyecto, andá a la pestaña Proyectos.'
+      : 'Los proyectos se organizan acá: creá uno nuevo, entrá a uno para ver su avance y agregarle tareas.')
+      + (state.saving ? ' · guardando…' : '');
+    wrap.appendChild(lead);
+
+    // capture — crea una tarea suelta o un proyecto nuevo, según el tipo elegido
+    var captureTipo = 'tarea';
+    var capture = document.createElement('form');
+    capture.className = 'capture';
+    capture.style.flexWrap = 'wrap';
+
+    var typeRow = document.createElement('div');
+    typeRow.className = 'segments';
+    typeRow.style.margin = '0';
+    [['tarea','Tarea'],['proyecto','Proyecto nuevo']].forEach(function(opt){
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = opt[1];
+      if(captureTipo === opt[0]) b.className = 'active';
+      b.addEventListener('click', function(){
+        captureTipo = opt[0];
+        Array.prototype.forEach.call(typeRow.children, function(btn, i){
+          btn.className = (i === (opt[0] === 'tarea' ? 0 : 1)) ? 'active' : '';
+        });
+        input.placeholder = captureTipo === 'proyecto' ? 'Nombre del proyecto nuevo…' : 'Agregar al inbox… (ej: llamar al proveedor)';
+      });
+      typeRow.appendChild(b);
+    });
+
+    var input = document.createElement('input');
+    input.type = 'text'; input.id = 'captureInput'; input.required = true;
+    input.placeholder = 'Agregar al inbox… (ej: llamar al proveedor)';
+
+    var submitBtn = document.createElement('button');
+    submitBtn.type = 'submit'; submitBtn.textContent = 'Agregar';
+
+    capture.appendChild(typeRow);
+    capture.appendChild(input);
+    capture.appendChild(submitBtn);
+    capture.addEventListener('submit', function(e){
+      e.preventDefault();
+      var val = input.value.trim();
+      if(!val) return;
+      input.value = '';
+      if(captureTipo === 'proyecto'){
+        state.gtdView = 'proyectos';
+        guardar({ action:'addProject', nombre: val, estado:'Activo' });
+      } else {
+        guardar({ action:'addTask', tarea: val, proyecto:'', estado:'Inbox' });
+      }
+    });
+    wrap.appendChild(capture);
+
+    // tabs Tareas / Proyectos
+    var tabs = document.createElement('div');
+    tabs.className = 'segments';
+    [['tareas','Tareas'],['proyectos','Proyectos']].forEach(function(s){
+      var b = document.createElement('button');
+      b.textContent = s[1];
+      if(state.gtdView === s[0]) b.className = 'active';
+      b.addEventListener('click', function(){ state.gtdView = s[0]; render(); });
+      tabs.appendChild(b);
+    });
+    wrap.appendChild(tabs);
+
+    if(state.gtdView === 'tareas'){
+      wrap.appendChild(renderTareasView());
+    } else {
+      wrap.appendChild(renderProyectosView());
+    }
+
+    main.innerHTML = '';
+    main.appendChild(wrap);
+  }
+
+  function renderTareasView(){
+    var section = document.createElement('div');
+
+    // dashboard
+    var counts = {Inbox:0, 'Próxima':0, Esperando:0, Hecho:0};
+    state.tasks.forEach(function(t){ counts[t.estado] = (counts[t.estado]||0)+1; });
+    var vencenSemana = state.tasks.filter(function(t){
+      if(t.estado === 'Hecho' || !t.fecha) return false;
+      var d = daysUntil(t.fecha);
+      return d !== null && d >= 0 && d <= 7;
+    }).length;
+    var stats = document.createElement('div');
+    stats.className = 'stats';
+    [
+      ['Inbox', counts['Inbox']||0, false],
+      ['Próximas', counts['Próxima']||0, false],
+      ['Esperando', counts['Esperando']||0, false],
+      ['Vencen esta semana', vencenSemana, vencenSemana>0]
+    ].forEach(function(s){
+      var el = document.createElement('div');
+      el.className = 'stat' + (s[2] ? ' warn' : '');
+      el.innerHTML = '<div class="n tabular">'+s[1]+'</div><div class="l">'+s[0]+'</div>';
+      stats.appendChild(el);
+    });
+    section.appendChild(stats);
+
+    // segments
+    var segs = [['todas','Todas'],['Inbox','Inbox'],['Próxima','Próximas'],['Esperando','Esperando'],['Hecho','Hechas']];
+    var segRow = document.createElement('div');
+    segRow.className = 'segments';
+    segs.forEach(function(s){
+      var b = document.createElement('button');
+      b.textContent = s[1];
+      if(state.segment === s[0]) b.className = 'active';
+      b.addEventListener('click', function(){ state.segment = s[0]; render(); });
+      segRow.appendChild(b);
+    });
+    section.appendChild(segRow);
+
+    var list = document.createElement('section');
+    list.className = 'tasks';
+    var shown = state.tasks.filter(function(t){
+      return state.segment === 'todas' ? true : t.estado === state.segment;
+    });
+    shown.sort(porFechaAscendente);
+    if(shown.length === 0){
+      var e = document.createElement('div');
+      e.className = 'empty';
+      e.textContent = 'No hay tareas en esta vista.';
+      list.appendChild(e);
+    }
+    shown.forEach(function(t){ list.appendChild(renderTaskCard(t)); });
+    section.appendChild(list);
+
+    return section;
+  }
+
+  function renderProyectosView(){
+    var section = document.createElement('section');
+    section.className = 'tasks';
+
+    if(state.projects.length === 0){
+      var e = document.createElement('div');
+      e.className = 'empty';
+      e.textContent = 'Todavía no hay proyectos — creá uno arriba.';
+      section.appendChild(e);
+      return section;
+    }
+
+    state.projects.forEach(function(p){
+      section.appendChild(renderProyectoCard(p));
+    });
+    return section;
+  }
+
+  function renderProyectoCard(p){
+    var hijos = state.tasks.filter(function(t){ return t.proyecto === p.nombre; }).sort(porFechaAscendente);
+    var hechas = hijos.filter(function(t){ return t.estado === 'Hecho'; }).length;
+    var pct = hijos.length ? Math.round(100 * hechas / hijos.length) : 0;
+    var abierto = state.proyectoAbierto === p.row;
+
+    var card = document.createElement('div');
+    card.className = 'task';
+
+    var top = document.createElement('div');
+    top.className = 'task-top';
+    var title = document.createElement('div');
+    title.className = 'title';
+    title.style.cursor = 'pointer';
+    title.textContent = (abierto ? '▾ ' : '▸ ') + p.nombre;
+    title.addEventListener('click', function(){ state.proyectoAbierto = abierto ? null : p.row; render(); });
+    top.appendChild(title);
+
+    var estSel = document.createElement('select');
+    estSel.className = 'state';
+    ['Activo','Pausado','Hecho'].forEach(function(s){
+      var o = document.createElement('option');
+      o.value = s; o.textContent = s;
+      if(s === p.estado) o.selected = true;
+      estSel.appendChild(o);
+    });
+    estSel.addEventListener('change', function(){ guardar({ action:'updateProject', row: p.row, estado: estSel.value }); });
+    top.appendChild(estSel);
+    card.appendChild(top);
+
+    // barra de progreso
+    var barWrap = document.createElement('div');
+    barWrap.style.cssText = 'background:var(--surface-2);border-radius:999px;height:8px;overflow:hidden;margin-top:2px';
+    var bar = document.createElement('div');
+    bar.style.cssText = 'background:var(--accent);height:100%;width:'+pct+'%;transition:width .2s';
+    barWrap.appendChild(bar);
+    card.appendChild(barWrap);
+
+    var meta = document.createElement('div');
+    meta.className = 'task-meta';
+    var c1 = document.createElement('span'); c1.className='chip tabular'; c1.textContent = pct+'% · '+hechas+'/'+hijos.length+' tareas';
+    meta.appendChild(c1);
+    if(p.categoria){
+      var cCat = document.createElement('span'); cCat.className='chip'; cCat.textContent = p.categoria;
+      meta.appendChild(cCat);
+    }
+    if(p.fecha){
+      var d = daysUntil(p.fecha);
+      var c2 = document.createElement('span');
+      c2.className = 'chip due' + (d !== null && d <= 3 ? ' soon' : '');
+      c2.textContent = 'Objetivo: ' + fmtDate(p.fecha) + (d !== null ? (d < 0 ? ' · vencido' : d === 0 ? ' · hoy' : ' · en ' + d + 'd') : '');
+      meta.appendChild(c2);
+    }
+    card.appendChild(meta);
+
+    if(abierto){
+      var dateRow = document.createElement('div');
+      dateRow.className = 'task-edit';
+      var catSelP = document.createElement('select');
+      catSelP.className = 'g1';
+      var optNoneP = document.createElement('option');
+      optNoneP.value = ''; optNoneP.textContent = 'Categoría';
+      catSelP.appendChild(optNoneP);
+      state.categorias.forEach(function(c){
+        var o = document.createElement('option');
+        o.value = c; o.textContent = c;
+        if(c === p.categoria) o.selected = true;
+        catSelP.appendChild(o);
+      });
+      catSelP.addEventListener('change', function(){ guardar({ action:'updateProject', row: p.row, categoria: catSelP.value }); });
+      var dateIn = document.createElement('input');
+      dateIn.type = 'date'; dateIn.className = 'g3'; dateIn.value = p.fecha || '';
+      dateIn.addEventListener('change', function(){ guardar({ action:'updateProject', row: p.row, fecha: dateIn.value }); });
+      dateRow.appendChild(catSelP);
+      dateRow.appendChild(dateIn);
+      card.appendChild(dateRow);
+
+      var subList = document.createElement('div');
+      subList.style.cssText = 'display:flex;flex-direction:column;gap:8px;margin-top:6px';
+      if(hijos.length === 0){
+        var e2 = document.createElement('div');
+        e2.className = 'empty';
+        e2.textContent = 'Este proyecto todavía no tiene tareas.';
+        subList.appendChild(e2);
+      }
+      hijos.forEach(function(t){ subList.appendChild(renderTaskCard(t)); });
+      card.appendChild(subList);
+
+      var addRow = document.createElement('form');
+      addRow.className = 'capture';
+      addRow.style.marginTop = '8px';
+      addRow.innerHTML = '<input type="text" placeholder="Agregar tarea a este proyecto…" required>' +
+                          '<button type="submit">Agregar</button>';
+      addRow.addEventListener('submit', function(e){
+        e.preventDefault();
+        var inp = addRow.querySelector('input');
+        var val = inp.value.trim();
+        if(!val) return;
+        inp.value = '';
+        guardar({ action:'addTask', tarea: val, proyecto: p.nombre, estado:'Próxima' });
+      });
+      card.appendChild(addRow);
+    }
+
+    return card;
+  }
+
+  function renderTaskCard(t){
+    var card = document.createElement('div');
+    card.className = 'task';
+
+    var top = document.createElement('div');
+    top.className = 'task-top';
+
+    var title = document.createElement('div');
+    title.className = 'title' + (t.estado === 'Hecho' ? ' done' : '');
+    title.textContent = t.tarea;
+    top.appendChild(title);
+
+    var sel = document.createElement('select');
+    sel.className = 'state';
+    ESTADOS.forEach(function(s){
+      var o = document.createElement('option');
+      o.value = s; o.textContent = s;
+      if(s === t.estado) o.selected = true;
+      sel.appendChild(o);
+    });
+    sel.addEventListener('change', function(){ guardar({ action:'updateTask', row: t.row, estado: sel.value }); });
+    top.appendChild(sel);
+    card.appendChild(top);
+
+    // meta chips
+    var meta = document.createElement('div');
+    meta.className = 'task-meta';
+    if(t.proyecto){
+      var c0 = document.createElement('span'); c0.className='chip'; c0.textContent = '◆ ' + t.proyecto;
+      meta.appendChild(c0);
+    }
+    if(t.categoria && !t.proyecto){
+      var c1 = document.createElement('span'); c1.className='chip'; c1.textContent = t.categoria;
+      meta.appendChild(c1);
+    }
+    if(t.contexto){
+      var c2 = document.createElement('span'); c2.className='chip'; c2.textContent = t.contexto;
+      meta.appendChild(c2);
+    }
+    if(t.prioridad){
+      var c3 = document.createElement('span'); c3.className='chip'; c3.textContent = 'Prioridad: ' + t.prioridad;
+      meta.appendChild(c3);
+    }
+    if(t.fecha){
+      var d = daysUntil(t.fecha);
+      var c4 = document.createElement('span');
+      c4.className = 'chip due' + (d !== null && d <= 3 ? ' soon' : '');
+      c4.textContent = fmtDate(t.fecha) + (d !== null ? (d < 0 ? ' · vencida' : d === 0 ? ' · hoy' : ' · en ' + d + 'd') : '');
+      meta.appendChild(c4);
+    }
+    if(meta.children.length) card.appendChild(meta);
+
+    // inline edit row
+    var edit = document.createElement('div');
+    edit.className = 'task-edit';
+
+    var catSel = null;
+    if(!t.proyecto){
+      catSel = document.createElement('select');
+      catSel.className = 'g1';
+      var optNone = document.createElement('option');
+      optNone.value = ''; optNone.textContent = 'Categoría';
+      catSel.appendChild(optNone);
+      state.categorias.forEach(function(c){
+        var o = document.createElement('option');
+        o.value = c; o.textContent = c;
+        if(c === t.categoria) o.selected = true;
+        catSel.appendChild(o);
+      });
+      catSel.addEventListener('change', function(){ guardar({ action:'updateTask', row: t.row, categoria: catSel.value }); });
+    }
+
+    var ctxIn = document.createElement('input');
+    ctxIn.className = 'g1'; ctxIn.placeholder = 'Contexto'; ctxIn.value = t.contexto;
+    ctxIn.addEventListener('change', function(){ guardar({ action:'updateTask', row: t.row, contexto: ctxIn.value }); });
+
+    var prSel = document.createElement('select');
+    prSel.className = 'g2';
+    PRIORIDADES.forEach(function(p){
+      var o = document.createElement('option');
+      o.value = p; o.textContent = p || 'Prioridad';
+      if(p === t.prioridad) o.selected = true;
+      prSel.appendChild(o);
+    });
+    prSel.addEventListener('change', function(){ guardar({ action:'updateTask', row: t.row, prioridad: prSel.value }); });
+
+    var dateIn = document.createElement('input');
+    dateIn.type = 'date'; dateIn.className = 'g3'; dateIn.value = t.fecha || '';
+    dateIn.addEventListener('change', function(){ guardar({ action:'updateTask', row: t.row, fecha: dateIn.value }); });
+
+    if(catSel) edit.appendChild(catSel);
+    edit.appendChild(ctxIn);
+    edit.appendChild(prSel);
+    edit.appendChild(dateIn);
+    card.appendChild(edit);
+
+    return card;
+  }
+
+  function renderSoon(label){
+    main.innerHTML = '';
+    var p = document.createElement('div');
+    p.className = 'soon-panel';
+    p.innerHTML = '<h2>' + label + '</h2><p>Este módulo llega después del 1 de noviembre, reusando este mismo shell.</p>';
+    main.appendChild(p);
+  }
+
+  function render(){
+    renderNav();
+    if(state.activeModule === 'gtd'){
+      renderGTD();
+      footNote.textContent = state.apiUrl
+        ? 'Conectado — los cambios se guardan directo en el Sheet vía Apps Script.'
+        : 'Todavía sin conectar: pegá la URL de la Web App arriba para leer y escribir tus datos reales.';
+    } else {
+      renderSoon(MODULES.filter(function(m){return m.id===state.activeModule})[0].label);
+      footNote.textContent = '';
+    }
+  }
+
+  cargarDatos();
+})();
+</script>
