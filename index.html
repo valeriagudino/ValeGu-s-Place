@@ -157,17 +157,9 @@
 (function(){
   "use strict";
 
-  // ---- espacios (cada uno = una URL de Web App distinta: Mío, Compartido, etc.) ----
-  var ESPACIOS_KEY = 'motorGtdEspacios';
-  var ESPACIO_ACTIVO_KEY = 'motorGtdEspacioActivo';
-  function getEspacios(){ try { return JSON.parse(localStorage.getItem(ESPACIOS_KEY) || '[]'); } catch(e){ return []; } }
-  function setEspacios(lista){ try { localStorage.setItem(ESPACIOS_KEY, JSON.stringify(lista)); } catch(e){} }
-  function getEspacioActivoId(){ try { return localStorage.getItem(ESPACIO_ACTIVO_KEY) || ''; } catch(e){ return ''; } }
-  function setEspacioActivoId(id){ try { localStorage.setItem(ESPACIO_ACTIVO_KEY, id); } catch(e){} }
-
+  // ---- datos: todo vive en este mismo Apps Script, sin fetch ni URLs que guardar ----
   var today = new Date();
 
-  var espaciosGuardados = getEspacios();
   var state = {
     activeModule: 'gtd',
     gtdView: 'tareas',
@@ -178,64 +170,47 @@
     categorias: [],
     loading: false,
     saving: false,
-    error: '',
-    espacios: espaciosGuardados,
-    espacioActivoId: getEspacioActivoId() || (espaciosGuardados[0] ? espaciosGuardados[0].id : ''),
-    mostrarAgregarEspacio: false
+    error: ''
   };
-
-  function espacioActivo(){
-    var encontrado = null;
-    state.espacios.forEach(function(e){ if(e.id === state.espacioActivoId) encontrado = e; });
-    return encontrado;
-  }
 
   var ESTADOS = ['Inbox','Próxima','Esperando','Hecho'];
   var PRIORIDADES = ['', 'Baja','Media','Alta'];
 
-  // ---- llamadas a la API ----
+  // ---- llamadas al servidor (mismo proyecto de Apps Script, sin CORS) ----
   function cargarDatos(){
-    var esp = espacioActivo();
-    if(!esp){ render(); return; }
     state.loading = true; state.error = ''; render();
-    fetch(esp.apiUrl)
-      .then(function(r){ if(!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
-      .then(function(data){
+    google.script.run
+      .withSuccessHandler(function(data){
         state.tasks = data.tareas || [];
         state.projects = data.proyectos || [];
         state.categorias = data.categorias || [];
         state.loading = false;
         render();
       })
-      .catch(function(err){
+      .withFailureHandler(function(err){
         state.loading = false;
-        state.error = 'No se pudo cargar: ' + err.message;
+        state.error = 'No se pudo cargar: ' + (err && err.message ? err.message : err);
         render();
-      });
+      })
+      .obtenerDatos();
   }
 
   function guardar(payload){
-    var esp = espacioActivo();
-    if(!esp) return;
     state.saving = true; render();
-    return fetch(esp.apiUrl, { method:'POST', body: JSON.stringify(payload) })
-      .then(function(r){ return r.json(); })
-      .then(function(data){
+    google.script.run
+      .withSuccessHandler(function(data){
         state.saving = false;
-        if(data.ok === false){
-          state.error = 'No se pudo guardar: ' + data.error;
-        } else {
-          state.tasks = data.tareas || state.tasks;
-          state.projects = data.proyectos || state.projects;
-          state.error = '';
-        }
+        state.tasks = data.tareas || state.tasks;
+        state.projects = data.proyectos || state.projects;
+        state.error = '';
         render();
       })
-      .catch(function(err){
+      .withFailureHandler(function(err){
         state.saving = false;
-        state.error = 'No se pudo guardar: ' + err.message;
+        state.error = 'No se pudo guardar: ' + (err && err.message ? err.message : err);
         render();
-      });
+      })
+      .ejecutarAccion(payload);
   }
 
   var moduleNav = document.getElementById('moduleNav');
@@ -287,123 +262,14 @@
     return d.toLocaleDateString('es-CL', {day:'numeric', month:'short'});
   }
 
-  function renderEspaciosNav(){
-    var wrap = document.createElement('div');
-    wrap.className = 'segments';
-    wrap.style.marginBottom = '18px';
-
-    state.espacios.forEach(function(esp){
-      var b = document.createElement('button');
-      b.type = 'button';
-      if(esp.id === state.espacioActivoId) b.className = 'active';
-
-      b.appendChild(document.createTextNode(esp.nombre + ' '));
-
-      var close = document.createElement('span');
-      close.textContent = '×';
-      close.style.opacity = '.55';
-      close.title = 'Quitar este espacio';
-      close.addEventListener('click', function(ev){
-        ev.stopPropagation();
-        if(!confirm('¿Quitar el espacio "' + esp.nombre + '"? No borra nada del Sheet, solo esta conexión guardada acá.')) return;
-        var lista = state.espacios.filter(function(e){ return e.id !== esp.id; });
-        state.espacios = lista;
-        setEspacios(lista);
-        if(state.espacioActivoId === esp.id){
-          state.espacioActivoId = lista[0] ? lista[0].id : '';
-          setEspacioActivoId(state.espacioActivoId);
-          cargarDatos();
-        } else {
-          render();
-        }
-      });
-      b.appendChild(close);
-
-      b.addEventListener('click', function(){
-        if(state.espacioActivoId === esp.id) return;
-        state.espacioActivoId = esp.id;
-        setEspacioActivoId(esp.id);
-        state.mostrarAgregarEspacio = false;
-        cargarDatos();
-      });
-      wrap.appendChild(b);
-    });
-
-    var addBtn = document.createElement('button');
-    addBtn.type = 'button';
-    addBtn.textContent = '+ espacio';
-    addBtn.style.borderStyle = 'dashed';
-    if(state.mostrarAgregarEspacio) addBtn.className = 'active';
-    addBtn.addEventListener('click', function(){
-      state.mostrarAgregarEspacio = !state.mostrarAgregarEspacio;
-      render();
-    });
-    wrap.appendChild(addBtn);
-
-    return wrap;
-  }
-
-  function renderAgregarEspacio(){
-    var form = document.createElement('form');
-    form.className = 'capture capture-sub';
-    form.style.flexWrap = 'wrap';
-
-    var nombreIn = document.createElement('input');
-    nombreIn.type = 'text'; nombreIn.required = true;
-    nombreIn.placeholder = 'Nombre del espacio (ej: Mío, Compartido, Mauri)';
-    nombreIn.style.flex = '1 1 200px';
-
-    var urlIn = document.createElement('input');
-    urlIn.type = 'url'; urlIn.required = true;
-    urlIn.placeholder = 'URL de la Web App (termina en /exec)';
-    urlIn.style.flex = '2 1 260px';
-
-    var btn = document.createElement('button');
-    btn.type = 'submit'; btn.textContent = 'Agregar espacio';
-
-    form.appendChild(nombreIn);
-    form.appendChild(urlIn);
-    form.appendChild(btn);
-    form.addEventListener('submit', function(e){
-      e.preventDefault();
-      var nombre = nombreIn.value.trim();
-      var url = urlIn.value.trim();
-      if(!nombre || !url) return;
-      var nuevo = { id: 'e' + Date.now(), nombre: nombre, apiUrl: url };
-      var lista = state.espacios.concat([nuevo]);
-      state.espacios = lista;
-      setEspacios(lista);
-      state.espacioActivoId = nuevo.id;
-      setEspacioActivoId(nuevo.id);
-      state.mostrarAgregarEspacio = false;
-      cargarDatos();
-    });
-    return form;
-  }
-
   function renderGTD(){
     var wrap = document.createElement('div');
-
-    wrap.appendChild(renderEspaciosNav());
-
-    if(state.espacios.length === 0 || state.mostrarAgregarEspacio){
-      if(state.espacios.length === 0){
-        var introP = document.createElement('p');
-        introP.className = 'lead';
-        introP.textContent = 'Agregá tu primer espacio: pegá la URL de la Web App de Apps Script del Sheet que quieras conectar (la que termina en /exec). Podés agregar varios — uno por Sheet.';
-        wrap.appendChild(introP);
-      }
-      wrap.appendChild(renderAgregarEspacio());
-      main.innerHTML = '';
-      main.appendChild(wrap);
-      return;
-    }
 
     if(state.error){
       var errBox = document.createElement('p');
       errBox.className = 'lead';
       errBox.style.color = 'var(--danger)';
-      errBox.textContent = state.error + ' — revisá la URL de este espacio, o quitalo con la × de su pestaña y agregalo de nuevo.';
+      errBox.textContent = state.error;
       wrap.appendChild(errBox);
     }
 
@@ -791,10 +657,7 @@
     renderNav();
     if(state.activeModule === 'gtd'){
       renderGTD();
-      var esp = espacioActivo();
-      footNote.textContent = esp
-        ? 'Conectado a "' + esp.nombre + '" — los cambios se guardan directo en ese Sheet vía Apps Script.'
-        : 'Todavía sin conectar: agregá un espacio arriba (uno por cada Sheet: el tuyo, el compartido, etc.).';
+      footNote.textContent = state.loading ? '' : 'Los cambios se guardan directo en el Sheet.';
     } else {
       renderSoon(MODULES.filter(function(m){return m.id===state.activeModule})[0].label);
       footNote.textContent = '';
