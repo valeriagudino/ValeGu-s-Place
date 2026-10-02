@@ -2,7 +2,7 @@
 <title>Motor GTD</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders:wght@600;700;800&family=IBM+Plex+Sans+Condensed:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
   /* Layout: fixed top app-bar (module switcher) + scrollable content area, single column, card-based task rows */
   :root{
@@ -11,8 +11,8 @@
     --accent:#1f6f5c; --accent-ink:#ffffff; --accent-soft:#e3efe9;
     --warn:#a35a1f; --warn-soft:#f3e6d6;
     --danger:#a33b3b;
-    --font-display:'Sora',system-ui,sans-serif;
-    --font-body:'IBM Plex Sans',system-ui,sans-serif;
+    --font-display:'Big Shoulders',system-ui,sans-serif;
+    --font-body:'IBM Plex Sans Condensed',system-ui,sans-serif;
     --font-mono:'IBM Plex Mono',ui-monospace,monospace;
     color-scheme: light;
   }
@@ -37,7 +37,7 @@
   *{box-sizing:border-box}
   body{background:var(--bg);color:var(--ink);font-family:var(--font-body);margin:0;min-height:100%}
   html,body{height:100%}
-  h1,h2,h3{font-family:var(--font-display);text-wrap:balance;margin:0}
+  h1,h2,h3{font-family:var(--font-display);text-wrap:balance;margin:0;font-weight:700;letter-spacing:.01em}
   button{font-family:inherit;cursor:pointer}
   input,select,textarea{font-family:inherit}
   .tabular{font-variant-numeric:tabular-nums}
@@ -71,19 +71,25 @@
   .stat .l{font-size:.76rem;color:var(--ink-dim);margin-top:5px;text-transform:uppercase;letter-spacing:.04em}
   .stat.warn .n{color:var(--warn)}
 
-  /* Inbox capture */
+  /* Inbox capture — la acción principal del módulo, se le da más aire y peso que al resto */
   .capture{
-    background:var(--surface);border:1px solid var(--border);border-radius:12px;
-    padding:14px;display:flex;gap:8px;margin-bottom:26px;
+    background:var(--surface);border:1px solid var(--border);border-left:4px solid var(--accent);
+    border-radius:12px;padding:18px 20px;display:flex;gap:10px;margin-bottom:26px;
+    box-shadow:0 1px 3px rgba(0,0,0,.04);
   }
   .capture input{
-    flex:1;border:none;background:transparent;font-size:1rem;color:var(--ink);outline:none;min-width:0;
+    flex:1;border:none;background:transparent;font-size:1.15rem;font-weight:500;color:var(--ink);outline:none;min-width:0;
   }
-  .capture input::placeholder{color:var(--ink-faint)}
+  .capture input::placeholder{color:var(--ink-faint);font-weight:400}
   .capture button{
     background:var(--accent);color:var(--accent-ink);border:none;border-radius:8px;
-    padding:0 16px;font-weight:600;font-size:.88rem;flex-shrink:0;
+    padding:0 18px;font-weight:600;font-size:.94rem;flex-shrink:0;
   }
+  .capture.capture-sub{
+    border-left:1px solid var(--border);padding:12px 14px;box-shadow:none;margin-bottom:0;
+  }
+  .capture.capture-sub input{font-size:1rem;font-weight:400}
+  .capture.capture-sub button{padding:0 14px;font-size:.86rem}
 
   /* Filter/segment row */
   .segments{display:flex;gap:6px;margin-bottom:14px;overflow-x:auto;padding-bottom:2px}
@@ -335,7 +341,7 @@
 
   function renderAgregarEspacio(){
     var form = document.createElement('form');
-    form.className = 'capture';
+    form.className = 'capture capture-sub';
     form.style.flexWrap = 'wrap';
 
     var nombreIn = document.createElement('input');
@@ -648,7 +654,7 @@
       card.appendChild(subList);
 
       var addRow = document.createElement('form');
-      addRow.className = 'capture';
+      addRow.className = 'capture capture-sub';
       addRow.style.marginTop = '8px';
       addRow.innerHTML = '<input type="text" placeholder="Agregar tarea a este proyecto…" required>' +
                           '<button type="submit">Agregar</button>';
