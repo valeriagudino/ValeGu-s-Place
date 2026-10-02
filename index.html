@@ -53,15 +53,6 @@
     padding:14px 20px;display:flex;align-items:center;gap:18px;flex-wrap:wrap;
   }
   header.bar .brand{font-family:var(--font-display);font-weight:700;font-size:1.05rem;letter-spacing:.01em}
-  nav.modules{display:flex;gap:6px;flex-wrap:wrap}
-  nav.modules button{
-    border:1px solid transparent;background:transparent;color:var(--ink-dim);
-    padding:7px 12px;border-radius:8px;font-size:.88rem;font-weight:500;
-    display:flex;align-items:center;gap:6px;
-  }
-  nav.modules button.active{background:var(--accent-soft);color:var(--accent);font-weight:600}
-  nav.modules button:disabled{opacity:.45;cursor:default}
-  nav.modules button .soon{font-size:.68rem;font-family:var(--font-mono);color:var(--ink-faint)}
 
   main{flex:1;overflow-y:auto;padding:24px 20px 60px;max-width:760px;width:100%;margin:0 auto}
   .lead{color:var(--ink-dim);font-size:.94rem;margin:2px 0 22px;max-width:60ch}
@@ -133,12 +124,6 @@
 
   .empty{color:var(--ink-faint);font-size:.88rem;padding:26px 4px;text-align:center}
 
-  .soon-panel{
-    background:var(--surface);border:1px dashed var(--border);border-radius:12px;
-    padding:34px 20px;text-align:center;color:var(--ink-dim);
-  }
-  .soon-panel h2{font-size:1.05rem;margin-bottom:6px;color:var(--ink)}
-
   footer.note{
     max-width:760px;margin:0 auto;padding:0 20px 30px;color:var(--ink-faint);font-size:.76rem;line-height:1.5;
   }
@@ -147,7 +132,6 @@
 <div id="app">
   <header class="bar">
     <div class="brand">Motor GTD</div>
-    <nav class="modules" id="moduleNav"></nav>
   </header>
   <main id="main"></main>
   <footer class="note" id="footNote"></footer>
@@ -161,7 +145,6 @@
   var today = new Date();
 
   var state = {
-    activeModule: 'gtd',
     gtdView: 'tareas',
     segment: 'todas',
     proyectoAbierto: null,
@@ -213,34 +196,8 @@
       .ejecutarAccion(payload);
   }
 
-  var moduleNav = document.getElementById('moduleNav');
   var main = document.getElementById('main');
   var footNote = document.getElementById('footNote');
-
-  var MODULES = [
-    {id:'gtd', label:'GTD', ready:true},
-    {id:'compras', label:'Compras', ready:false},
-    {id:'maquillaje', label:'Maquillaje', ready:false},
-    {id:'outfits', label:'Outfits', ready:false}
-  ];
-
-  function renderNav(){
-    moduleNav.innerHTML = '';
-    MODULES.forEach(function(m){
-      var b = document.createElement('button');
-      b.textContent = m.label;
-      if(!m.ready){
-        var s = document.createElement('span');
-        s.className = 'soon'; s.textContent = 'pronto';
-        b.appendChild(s);
-        b.disabled = true;
-      } else {
-        if(state.activeModule === m.id) b.className = 'active';
-        b.addEventListener('click', function(){ state.activeModule = m.id; render(); });
-      }
-      moduleNav.appendChild(b);
-    });
-  }
 
   function daysUntil(iso){
     if(!iso) return null;
@@ -645,23 +602,9 @@
     return card;
   }
 
-  function renderSoon(label){
-    main.innerHTML = '';
-    var p = document.createElement('div');
-    p.className = 'soon-panel';
-    p.innerHTML = '<h2>' + label + '</h2><p>Este módulo llega después del 1 de noviembre, reusando este mismo shell.</p>';
-    main.appendChild(p);
-  }
-
   function render(){
-    renderNav();
-    if(state.activeModule === 'gtd'){
-      renderGTD();
-      footNote.textContent = state.loading ? '' : 'Los cambios se guardan directo en el Sheet.';
-    } else {
-      renderSoon(MODULES.filter(function(m){return m.id===state.activeModule})[0].label);
-      footNote.textContent = '';
-    }
+    renderGTD();
+    footNote.textContent = state.loading ? '' : 'Los cambios se guardan directo en el Sheet.';
   }
 
   cargarDatos();
