@@ -80,13 +80,15 @@
     box-shadow:0 1px 3px rgba(0,0,0,.04);
   }
   .capture input{
-    flex:1;border:none;background:transparent;font-size:1.15rem;font-weight:500;color:var(--ink);outline:none;min-width:0;
+    flex:1;width:100%;border:none;background:transparent;font-size:1.15rem;font-weight:500;color:var(--ink);outline:none;min-width:0;
   }
   .capture input::placeholder{color:var(--ink-faint);font-weight:400}
   .capture button{
     background:var(--accent);color:var(--accent-ink);border:none;border-radius:8px;
-    padding:0 18px;font-weight:600;font-size:.94rem;flex-shrink:0;
+    padding:0 18px;font-weight:600;font-size:.94rem;flex-shrink:0;height:36px;
   }
+  .capture.capture-inbox{flex-direction:column;align-items:stretch;gap:12px}
+  .capture-row2{display:flex;align-items:center;justify-content:space-between;gap:10px}
   .capture.capture-sub{
     border-left:1px solid var(--border);padding:12px 14px;box-shadow:none;margin-bottom:0;
   }
@@ -425,8 +427,14 @@
     // capture — crea una tarea suelta o un proyecto nuevo, según el tipo elegido
     var captureTipo = 'tarea';
     var capture = document.createElement('form');
-    capture.className = 'capture';
-    capture.style.flexWrap = 'wrap';
+    capture.className = 'capture capture-inbox';
+
+    var input = document.createElement('input');
+    input.type = 'text'; input.id = 'captureInput'; input.required = true;
+    input.placeholder = 'Agregar al inbox… (ej: llamar al proveedor)';
+
+    var row2 = document.createElement('div');
+    row2.className = 'capture-row2';
 
     var typeRow = document.createElement('div');
     typeRow.className = 'segments';
@@ -446,16 +454,14 @@
       typeRow.appendChild(b);
     });
 
-    var input = document.createElement('input');
-    input.type = 'text'; input.id = 'captureInput'; input.required = true;
-    input.placeholder = 'Agregar al inbox… (ej: llamar al proveedor)';
-
     var submitBtn = document.createElement('button');
     submitBtn.type = 'submit'; submitBtn.textContent = 'Agregar';
 
-    capture.appendChild(typeRow);
+    row2.appendChild(typeRow);
+    row2.appendChild(submitBtn);
+
     capture.appendChild(input);
-    capture.appendChild(submitBtn);
+    capture.appendChild(row2);
     capture.addEventListener('submit', function(e){
       e.preventDefault();
       var val = input.value.trim();
